@@ -1,0 +1,21 @@
+services:
+  freellmapi:
+    build: .
+    restart: unless-stopped
+    environment:
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    volumes:
+      - freellmapi_data:/app/data
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.freellmapi.rule=Host(`freellm.rab.dc.microservice.ma`)"
+      - "traefik.http.services.freellmapi.loadbalancer.server.port=3001"
+
+volumes:
+  freellmapi_data:
+
+networks:
+  proxy-network:
+    external: true

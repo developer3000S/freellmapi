@@ -107,6 +107,22 @@ export function recordTokens(
 // Cooldown: when a provider returns 429, block that model+key for a period
 const cooldowns = new Map<string, number>(); // key -> expiry timestamp
 
+// Exponential backoff steps: 2min → 10min → 1h → 24h
+// After a daily quota exhausts, repeated 429s escalate to a 24-hour cooldown
+// automatically without needing to distinguish per-minute vs per-day errors.
+const COOLDOWN_STEPS = [120_000, 600_000, 3_600_000, 86_400_000];
+const COOLDOWN_HISTORY_WINDOW = 86_400_000; // 24h
+const cooldownHits = new Map<string, number[]>(); // key -> timestamps of past cooldowns
+
+export function getNextCooldownDuration(platform: string, modelId: string, keyId: number): number {
+  const key = `${platform}:${modelId}:${keyId}:cooldown`;
+  const now = Date.now();
+  const hits = (cooldownHits.get(key) ?? []).filter(t => now - t < COOLDOWN_HISTORY_WINDOW);
+  hits.push(now);
+  cooldownHits.set(key, hits);
+  return COOLDOWN_STEPS[Math.min(hits.length - 1, COOLDOWN_STEPS.length - 1)];
+}
+
 export function setCooldown(platform: string, modelId: string, keyId: number, durationMs = 60_000) {
   const key = `${platform}:${modelId}:${keyId}:cooldown`;
   cooldowns.set(key, Date.now() + durationMs);

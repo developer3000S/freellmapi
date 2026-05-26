@@ -1,0 +1,14 @@
+[phases.setup]
+# Pin a nixpkgs commit where nodejs_22 = 22.22.3 (satisfies Vite 6's 22.12+ requirement).
+# The Nixpacks v1.41.0 default snapshot resolves nodejs_22 to 22.11.0 which is too old.
+nixpkgsArchive = "167c482ea659a4a035046dcc0c3dc481ba1f36a9"
+nixPkgs = ["nodejs_22", "python3"]
+
+[phases.install]
+cmds = ["npm ci --loglevel=error"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "node server/dist/index.js"
