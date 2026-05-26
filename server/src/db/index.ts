@@ -49,6 +49,7 @@ export function initDb(dbPath?: string): Database.Database {
   migrateModelsV12(db);
   migrateModelsV13(db);
   migrateModelsV14(db);
+  migrateModelsV15(db);
   ensureUnifiedKey(db);
 
   console.log(`Database initialized at ${resolvedPath}`);
@@ -1228,6 +1229,32 @@ function migrateModelsV14(db: Database.Database) {
      WHERE platform = 'cerebras'
        AND model_id IN ('qwen-3-235b-a22b-instruct-2507', 'llama3.1-8b')
   `).run();
+}
+
+/**
+ * V15 (May 2026): Add Google models Gemma 4 26B IT and 31B IT to the catalog.
+ * Verified reachable on Google AI Studio free tier (20 RPD / 250K TPM pool).
+ */
+function migrateModelsV15(db: Database.Database) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO models (platform, model_id, display_name, intelligence_rank, speed_rank, size_label, rpm_limit, rpd_limit, tpm_limit, tpd_limit, monthly_token_budget, context_window)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const apply = db.transaction(() => {
+    insert.run('google', 'gemma-4-26b-a4b-it', 'Gemma 4 26B IT', 20, 4, 'Large', 30, 1000, 250000, null, '~30M', 32768);
+    insert.run('google', 'gemma-4-31b-it',     'Gemma 4 31B IT', 19, 4, 'Large', 30, 1000, 250000, null, '~30M', 32768);
+    const missing = db.prepare(`
+      SELECT m.id FROM models m
+      LEFT JOIN fallback_config f ON m.id = f.model_db_id
+      WHERE f.id IS NULL ORDER BY m.intelligence_rank ASC
+    `).all() as { id: number }[];
+    if (missing.length > 0) {
+      const maxPriority = (db.prepare('SELECT COALESCE(MAX(priority), 0) AS mx FROM fallback_config').get() as { mx: number }).mx;
+      const addFb = db.prepare('INSERT INTO fallback_config (model_db_id, priority, enabled) VALUES (?, ?, 1)');
+      for (let i = 0; i < missing.length; i++) addFb.run(missing[i].id, maxPriority + i + 1);
+    }
+  });
+  apply();
 }
 
 function ensureUnifiedKey(db: Database.Database) {
