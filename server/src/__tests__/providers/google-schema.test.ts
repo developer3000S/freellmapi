@@ -119,4 +119,34 @@ describe('sanitizeForGemini', () => {
     expect(sanitizeForGemini(42)).toBe(42);
     expect(sanitizeForGemini(true)).toBe(true);
   });
+
+  it('strips examples / const / readOnly / writeOnly (Gemini rejects all with 400)', () => {
+    // These fields are emitted by Zod, Pydantic, and most JSON-Schema generators
+    // (used by opencode, Continue, Cline tool definitions) but rejected by Google's
+    // Gemini and Gemma 4 IT generateContent endpoint with "Invalid JSON payload
+    // received. Unknown name 'X' at tools[0].function_declarations[0].parameters".
+    const input = {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'Shell command to execute',
+          examples: ['ls -la', 'pwd'],
+          readOnly: false,
+        },
+        mode: { type: 'string', const: 'sync' },
+        secret: { type: 'string', writeOnly: true },
+      },
+      required: ['command'],
+    };
+    expect(sanitizeForGemini(input)).toEqual({
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Shell command to execute' },
+        mode: { type: 'string' },
+        secret: { type: 'string' },
+      },
+      required: ['command'],
+    });
+  });
 });
